@@ -6,9 +6,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
-const { exec } = require('child_process'); // For checking ffmpeg/yt-dlp
-const youtubedl = require('youtube-dl-exec');
-const ffmpeg = require('fluent-ffmpeg');
+const { exec } = require('child_process'); // For checking ffmpeg/yt-dlp and running docker-compose exec
 
 // --- Utility Functions ---
 
@@ -81,13 +79,13 @@ async function main() {
             alias: 'c',
             describe: 'Directory to store original downloaded YouTube videos',
             type: 'string',
-            default: path.join(process.cwd(), '.youtube_cache'), // Default to .youtube_cache in current dir
+            default: path.join(process.cwd(), 'media', '.youtube_cache'), // Now under ./media
         })
         .option('temp-dir', {
             alias: 't',
             describe: 'Directory for temporary video segments (will be cleared)',
             type: 'string',
-            default: path.join(process.cwd(), '.temp_segments'), // Default to .temp_segments
+            default: path.join(process.cwd(), 'media', '.temp_segments'), // Now under ./media
         })
         .option('verbose', {
             alias: 'v',
@@ -108,8 +106,8 @@ async function main() {
 
     // 1. Check for FFmpeg and yt-dlp
     console.log("Checking for dependencies...");
-    const ffmpegFound = await checkToolExists("FFmpeg", "ffmpeg -version");
-    const ytdlpFound = await checkToolExists("yt-dlp", "yt-dlp --version");
+    const ffmpegFound = await checkToolExists("FFmpeg (docker)", "docker compose exec ffmpeg ffmpeg -version");
+    const ytdlpFound = await checkToolExists("yt-dlp (docker)", "docker compose exec ytdlp yt-dlp --version");
 
     if (!ffmpegFound || !ytdlpFound) {
         console.error("❌ Critical dependencies missing. Exiting.");
@@ -161,29 +159,22 @@ async function main() {
         }
         if (verbose) console.log(`Extracted Video ID: ${videoId}`);
 
+        // All paths must be under ./media for docker
         const cachedVideoPath = path.join(cacheDir, `${videoId}.mp4`);
-        let localVideoPath = cachedVideoPath; // Assume cached initially
+        const cachedVideoPathContainer = `/workdir/.youtube_cache/${videoId}.mp4`;
+        let localVideoPath = cachedVideoPath; // Host path
+        let containerVideoPath = cachedVideoPathContainer; // Container path
 
         // 4a. Check cache or download
         if (await fs.pathExists(cachedVideoPath)) {
             console.log(`✅ Video ${videoId} found in cache: ${cachedVideoPath}`);
-            // Optional: Add a check here if the cached version is 720p if metadata can be easily fetched.
-            // For simplicity, we assume if it's cached, it's the one we want.
-            // A more robust solution might store metadata or re-download if specific format is missing.
         } else {
             console.log(`ℹ️ Video ${videoId} not in cache. Downloading...`);
             try {
-                // yt-dlp command arguments:
-                // -f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]"
-                // This tries to get 720p MP4 with best audio, or best MP4 up to 720p.
-                // If specific 720p is unavailable, yt-dlp has fallbacks.
-                // We specify the output template to save directly to cache with VIDEO_ID.mp4
-                await youtubedl(task.url, {
-                    format: 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]',
-                    output: cachedVideoPath, // yt-dlp will use this as the output file path
-                    // noPlaylist: true, // if you want to ensure only single video download
-                    // quiet: !verbose, // Show yt-dlp output if verbose
-                });
+                // Download ONLY 720p MP4, store as <videoId>.mp4, never use format code in filename
+                const ytdlpCmd = `docker compose exec ytdlp yt-dlp -f "bestvideo[height<=720]+bestaudio/best[height<=720]" --merge-output-format mp4 -o "/workdir/.youtube_cache/${videoId}.mp4" "${task.url}"`;
+                if (verbose) console.log(`yt-dlp command: ${ytdlpCmd}`);
+                await execPromise(ytdlpCmd);
                 console.log(`✅ Downloaded and cached ${videoId} to ${cachedVideoPath}`);
             } catch (err) {
                 console.error(`❌ Error downloading ${task.url} (ID: ${videoId}): ${err.message}`);
@@ -195,52 +186,29 @@ async function main() {
 
         // 4b. Cut (Trim) video
         const segmentFileName = `cut_segment_${i + 1}_${videoId}.mp4`;
-        const segmentOutputPath = path.join(tempDir, segmentFileName);
+        const segmentOutputPath = path.join(tempDir, segmentFileName); // Host path
+        const segmentOutputPathContainer = `/workdir/.temp_segments/${segmentFileName}`;
         console.log(`Cutting segment for ${videoId}: ${task.startTime} to ${task.endTime}`);
 
         try {
-            await new Promise((resolve, reject) => {
-                ffmpeg(localVideoPath)
-                    .setStartTime(task.startTime)
-                    .setDuration(calculateDuration(task.startTime, task.endTime)) // FFmpeg often prefers duration
-                    // .to(task.endTime) // .to() can be less reliable than duration for some ffmpeg versions/inputs
-                    .outputOptions('-c copy') // Fast, lossless cut if possible
-                    .on('start', (commandLine) => {
-                        if (verbose) console.log(`FFmpeg command: ${commandLine}`);
-                    })
-                    .on('error', (err, stdout, stderr) => {
-                        console.error(`❌ FFmpeg error cutting ${videoId}: ${err.message}`);
-                        if (verbose) {
-                            console.error(`FFmpeg stdout: ${stdout}`);
-                            console.error(`FFmpeg stderr: ${stderr}`);
-                        }
-                        // Attempt re-encode if -c copy fails (often due to keyframe issues)
-                        console.warn(`⚠️ Lossless cut failed for ${videoId}. Attempting re-encode...`);
-                        ffmpeg(localVideoPath)
-                            .setStartTime(task.startTime)
-                            .setDuration(calculateDuration(task.startTime, task.endTime))
-                            // No -c copy, allow re-encoding
-                            .on('start', (commandLine) => {
-                                if (verbose) console.log(`FFmpeg (re-encode) command: ${commandLine}`);
-                            })
-                            .on('error', (reencodeErr) => {
-                                console.error(`❌ FFmpeg re-encode also failed for ${videoId}: ${reencodeErr.message}`);
-                                reject(reencodeErr);
-                            })
-                            .on('end', () => {
-                                console.log(`✅ Segment (re-encoded) for ${videoId} saved to ${segmentOutputPath}`);
-                                cutSegmentPaths.push(segmentOutputPath);
-                                resolve();
-                            })
-                            .save(segmentOutputPath);
-                    })
-                    .on('end', () => {
-                        console.log(`✅ Segment (lossless cut) for ${videoId} saved to ${segmentOutputPath}`);
-                        cutSegmentPaths.push(segmentOutputPath);
-                        resolve();
-                    })
-                    .save(segmentOutputPath);
-            });
+            // Try lossless cut first
+            const ffmpegCmd = `docker compose exec ffmpeg ffmpeg -y -ss ${task.startTime} -i \"${containerVideoPath}\" -t ${calculateDuration(task.startTime, task.endTime)} -c copy \"${segmentOutputPathContainer}\"`;
+            if (verbose) console.log(`FFmpeg command: ${ffmpegCmd}`);
+            try {
+                await execPromise(ffmpegCmd);
+                console.log(`✅ Segment (lossless cut) for ${videoId} saved to ${segmentOutputPath}`);
+                cutSegmentPaths.push(segmentOutputPath);
+            } catch (err) {
+                console.warn(`⚠️ Lossless cut failed for ${videoId}. Attempting re-encode...`);
+                if (verbose) console.log(`FFmpeg command: ${ffmpegCmd}`);
+
+                // Fallback: re-encode
+                const ffmpegReencodeCmd = `docker compose exec ffmpeg ffmpeg -y -ss ${task.startTime} -i \"${containerVideoPath}\" -t ${calculateDuration(task.startTime, task.endTime)} \"${segmentOutputPathContainer}\"`;
+                if (verbose) console.log(`FFmpeg (re-encode) command: ${ffmpegReencodeCmd}`);
+                await execPromise(ffmpegReencodeCmd);
+                console.log(`✅ Segment (re-encoded) for ${videoId} saved to ${segmentOutputPath}`);
+                cutSegmentPaths.push(segmentOutputPath);
+            }
         } catch (err) {
             console.warn(`Skipping segment for ${videoId} due to cutting error.`);
             continue; // Skip to next video if cutting fails
@@ -256,45 +224,27 @@ async function main() {
 
     console.log(`\nJoining ${cutSegmentPaths.length} segments...`);
 
-    // 5a. Create Manifest File (not strictly needed for fluent-ffmpeg's mergeToFile, but good for complex cases)
-    // fluent-ffmpeg can take an array of inputs for concatenation.
-    // However, for maximum compatibility and control, the concat demuxer method (using a list file) is robust.
-    // For simplicity here, we'll try direct input merging with fluent-ffmpeg.
-    // If issues arise, switch to concat demuxer (generate list file, then ffmpeg -f concat -safe 0 -i list.txt ...)
+    // 5a. Create concat list file for ffmpeg concat demuxer
+    const concatListPath = path.join(tempDir, 'concat_list.txt');
+    const concatListPathContainer = '/workdir/.temp_segments/concat_list.txt';
+    const concatListContent = cutSegmentPaths.map(p => `file '${path.basename(p)}'`).join('\n');
+    await fs.writeFile(concatListPath, concatListContent);
 
+    // 5b. Merge using ffmpeg concat demuxer
+    const outputContainerPath = `/workdir/${path.basename(output)}`;
     try {
-        const merger = ffmpeg();
-        cutSegmentPaths.forEach(segmentPath => {
-            merger.input(segmentPath);
-        });
-
-        await new Promise((resolve, reject) => {
-            merger
-                .on('start', (commandLine) => {
-                    if (verbose) console.log(`FFmpeg merge command: ${commandLine}`);
-                })
-                .on('error', (err, stdout, stderr) => {
-                    console.error(`❌ FFmpeg error joining segments: ${err.message}`);
-                    if (verbose) {
-                        console.error(`FFmpeg stdout (merge): ${stdout}`);
-                        console.error(`FFmpeg stderr (merge): ${stderr}`);
-                    }
-                    // Fallback: If direct merge fails, could try concat demuxer method here.
-                    // For now, we'll just report the error.
-                    console.error("Merge failed. Segments might have incompatible codecs/resolutions.");
-                    console.error("Ensure all source videos are similar or consider a re-encode step before merging.");
-                    reject(err);
-                })
-                .on('end', () => {
-                    console.log(`✅ All segments successfully merged into ${output}`);
-                    resolve();
-                })
-                .mergeToFile(output, tempDir); // fluent-ffmpeg handles temp files for merging in tempDir
-        });
-
+        const mergeCmd = `docker compose exec ffmpeg ffmpeg -y -f concat -safe 0 -i \"${concatListPathContainer}\" -c copy \"${outputContainerPath}\"`;
+        if (verbose) console.log(`FFmpeg merge command: ${mergeCmd}`);
+        await execPromise(mergeCmd);
+        // Move output from ./media to user-specified output if needed
+        const mergedOutputHost = path.join(path.dirname(output), path.basename(output));
+        const mergedOutputMedia = path.join(process.cwd(), 'media', path.basename(output));
+        if (mergedOutputHost !== mergedOutputMedia && await fs.pathExists(mergedOutputMedia)) {
+            await fs.move(mergedOutputMedia, mergedOutputHost, { overwrite: true });
+        }
+        console.log(`✅ All segments successfully merged into ${output}`);
     } catch (err) {
         console.error("❌ Failed to join videos.");
-        // No process.exit(1) here, allow cleanup
     }
 
     // 6. Cleanup
