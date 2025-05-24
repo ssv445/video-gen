@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  ffmpeg:
+    image: jrottenberg/ffmpeg:4.4-alpine # Using a specific alpine tag for smaller size
+    # The command keeps the container running so we can 'exec' into it.
+    # FFmpeg itself is called via 'docker-compose exec ffmpeg ffmpeg ...'
+    entrypoint: sh
+    command: -c "tail -f /workdir/package.json"
+    volumes:
+      # Mount a shared directory from host to /workdir in the container
+      # The Node.js script on the host will read/write to ./media
+      # and translate these paths to /workdir/... for docker exec commands.
+      - ./media:/workdir
+      - ./package.json:/workdir/package.json
+    working_dir: /workdir
+    # restart: unless-stopped # Optional: if you want it to auto-restart with Docker daemon
+
+  ytdlp:
+    image: python:3.11-alpine # Base Python image
+    # Install yt-dlp on container start and then keep it running.
+    # yt-dlp is called via 'docker-compose exec ytdlp yt-dlp ...'
+    command: sh -c "apk add --no-cache curl && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && chmod a+rx /usr/local/bin/yt-dlp && tail -f /workdir/package.json"
+    volumes:
+      # Mount the same shared directory
+      - ./media:/workdir
+      - ./package.json:/workdir/package.json
+    working_dir: /workdir
+
+    # restart: unless-stopped # Optional
+# Optional: Define a top-level volume if you prefer named volumes,
+# but for this host-centric script, bind mounts from ./media are more direct.
+# volumes:
+#   media_data:

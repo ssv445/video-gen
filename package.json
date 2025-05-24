@@ -1,0 +1,30 @@
+{
+    "name": "yt-video-stitcher",
+    "version": "1.0.0",
+    "description": "Downloads, cuts, and joins YouTube video segments.",
+    "main": "video-processor.js",
+    "bin": {
+        "yt-stitch": "./video-processor.js"
+    },
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "youtube",
+        "video",
+        "ffmpeg",
+        "yt-dlp",
+        "cli"
+    ],
+    "author": "Your Name",
+    "license": "ISC",
+    "dependencies": {
+        "fluent-ffmpeg": "^2.1.2",
+        "fs-extra": "^11.2.0",
+        "yargs": "^17.7.2",
+        "youtube-dl-exec": "^3.0.2"
+    },
+    "engines": {
+        "node": ">=16"
+    }
+}
