@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Segment } from "@/lib/types";
 import { timeToSeconds } from "@/lib/youtube";
+import videojs from "video.js";
+import "video.js/dist/video-js.css";
 
-// We'll use YouTube IFrame API instead of Video.js for simpler implementation
-declare global {
-  interface Window {
-    YT: any;
-    onYouTubeIframeAPIReady: () => void;
-  }
+// Import YouTube tech
+if (typeof window !== "undefined") {
+  require("videojs-youtube");
 }
 
 interface PreviewPlayerProps {
@@ -25,178 +24,164 @@ export default function PreviewPlayer({
   onSegmentChange,
   onSegmentVerified,
 }: PreviewPlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [isReady, setIsReady] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const currentSegment = segments[currentSegmentIndex];
 
-  // Load YouTube IFrame API
+  // Initialize Video.js player
   useEffect(() => {
-    if (window.YT) {
-      setIsReady(true);
-      return;
+    if (!videoRef.current) return;
+
+    // Only initialize once
+    if (!playerRef.current) {
+      const player = videojs(videoRef.current, {
+        techOrder: ["youtube"],
+        sources: [],
+        controls: true,
+        fluid: false,
+        aspectRatio: "16:9",
+        youtube: {
+          ytControls: 0,
+          modestbranding: 1,
+          rel: 0,
+          showinfo: 0,
+        },
+      });
+
+      playerRef.current = player;
+
+      // Set up event listeners
+      player.on("play", () => {
+        console.log("Video playing");
+        setIsPlaying(true);
+        startTimeTracking();
+      });
+
+      player.on("pause", () => {
+        console.log("Video paused");
+        setIsPlaying(false);
+        stopTimeTracking();
+      });
+
+      player.on("ended", () => {
+        console.log("Video ended");
+        setIsPlaying(false);
+        stopTimeTracking();
+        handleSegmentEnd();
+      });
+
+      player.on("loadedmetadata", () => {
+        console.log("Video loaded");
+        if (currentSegment) {
+          onSegmentVerified(currentSegmentIndex);
+        }
+      });
+
+      player.on("error", (e: any) => {
+        console.error("Video.js error:", e);
+      });
     }
 
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    const firstScriptTag = document.getElementsByTagName("script")[0];
-    firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
-
-    window.onYouTubeIframeAPIReady = () => {
-      setIsReady(true);
+    return () => {
+      if (playerRef.current && !playerRef.current.isDisposed()) {
+        stopTimeTracking();
+      }
     };
   }, []);
 
-  // Initialize player when API is ready and we have segments
+  // Load segment when it changes
   useEffect(() => {
-    if (isReady && currentSegment) {
-      const wasPlaying = isPlaying;
-      initPlayer();
+    if (!playerRef.current || !currentSegment) return;
 
-      // If we were playing before, auto-play the new segment
-      if (wasPlaying && playerRef.current) {
+    const player = playerRef.current;
+    const startTime = timeToSeconds(currentSegment.startTime);
+    const endTime = timeToSeconds(currentSegment.endTime);
+
+    console.log(`Loading segment ${currentSegmentIndex + 1}:`, {
+      videoId: currentSegment.videoId,
+      startTime,
+      endTime,
+    });
+
+    // Set source
+    player.src({
+      type: "video/youtube",
+      src: `https://www.youtube.com/watch?v=${currentSegment.videoId}&start=${startTime}&end=${endTime}`,
+    });
+
+    // Seek to start time after loading
+    const onLoadedData = () => {
+      player.currentTime(startTime);
+      player.off("loadeddata", onLoadedData);
+
+      // Auto-play if we were already playing
+      if (isPlaying) {
         setTimeout(() => {
-          if (playerRef.current && playerRef.current.playVideo) {
-            playerRef.current.playVideo();
-          }
-        }, 1000);
-      }
-    }
-  }, [isReady, currentSegmentIndex, segments.length]);
-
-  const initPlayer = () => {
-    if (!window.YT || !window.YT.Player) return;
-    if (!containerRef.current || !currentSegment) return;
-
-    // Destroy existing player
-    if (playerRef.current && typeof playerRef.current.destroy === 'function') {
-      try {
-        playerRef.current.destroy();
-      } catch (e) {
-        console.log('Error destroying player:', e);
-      }
-    }
-
-    // Clear the container
-    const container = document.getElementById("youtube-player");
-    if (container) {
-      container.innerHTML = '';
-    }
-
-    // Create new player
-    try {
-      playerRef.current = new window.YT.Player("youtube-player", {
-        height: "100%",
-        width: "100%",
-        videoId: currentSegment.videoId,
-        playerVars: {
-          start: timeToSeconds(currentSegment.startTime),
-          end: timeToSeconds(currentSegment.endTime),
-          autoplay: 0,
-          controls: 1,
-          modestbranding: 1,
-          rel: 0,
-        },
-        events: {
-          onReady: onPlayerReady,
-          onStateChange: onPlayerStateChange,
-        },
-      });
-    } catch (e) {
-      console.error('Error creating YouTube player:', e);
-    }
-  };
-
-  const onPlayerReady = () => {
-    console.log('YouTube player ready');
-    // Mark segment as verified once loaded
-    if (currentSegment) {
-      onSegmentVerified(currentSegmentIndex);
-    }
-  };
-
-  const onPlayerStateChange = (event: any) => {
-    if (event.data === window.YT.PlayerState.PLAYING) {
-      setIsPlaying(true);
-      startTimeTracking();
-    } else if (
-      event.data === window.YT.PlayerState.PAUSED ||
-      event.data === window.YT.PlayerState.ENDED
-    ) {
-      setIsPlaying(false);
-      stopTimeTracking();
-
-      // Auto-advance to next segment when current one ends
-      if (event.data === window.YT.PlayerState.ENDED && currentSegmentIndex < segments.length - 1) {
-        setTimeout(() => {
-          onSegmentChange(currentSegmentIndex + 1);
+          player.play().catch((e: any) => {
+            console.log("Auto-play prevented:", e);
+          });
         }, 500);
       }
-    }
-  };
+    };
+
+    player.one("loadeddata", onLoadedData);
+  }, [currentSegmentIndex, currentSegment?.videoId]);
 
   const startTimeTracking = () => {
-    if (intervalRef.current) return;
+    if (checkIntervalRef.current) return;
+    if (!currentSegment) return;
 
-    intervalRef.current = setInterval(() => {
-      if (playerRef.current && playerRef.current.getCurrentTime) {
-        const time = playerRef.current.getCurrentTime();
-        setCurrentTime(time);
+    const endTime = timeToSeconds(currentSegment.endTime);
 
-        // Check if we've reached the end time
-        if (currentSegment) {
-          const endTime = timeToSeconds(currentSegment.endTime);
-          if (time >= endTime) {
-            // Stop time tracking before advancing
-            stopTimeTracking();
+    checkIntervalRef.current = setInterval(() => {
+      if (!playerRef.current) return;
 
-            // Auto-advance to next segment
-            if (currentSegmentIndex < segments.length - 1) {
-              console.log('Auto-advancing to next segment');
-              onSegmentChange(currentSegmentIndex + 1);
-            } else {
-              // Last segment, just pause
-              if (playerRef.current && playerRef.current.pauseVideo) {
-                playerRef.current.pauseVideo();
-              }
-              setIsPlaying(false);
-            }
-          }
-        }
+      const currentTime = playerRef.current.currentTime();
+      setCurrentTime(currentTime);
+
+      // Check if we've reached the end time
+      if (currentTime >= endTime - 0.1) {
+        // 0.1s buffer
+        console.log("Reached end time, advancing to next segment");
+        stopTimeTracking();
+        handleSegmentEnd();
       }
     }, 100);
   };
 
   const stopTimeTracking = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (checkIntervalRef.current) {
+      clearInterval(checkIntervalRef.current);
+      checkIntervalRef.current = null;
     }
   };
 
-  // Note: Segment changes are now handled by the initPlayer useEffect above
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      stopTimeTracking();
+  const handleSegmentEnd = () => {
+    if (currentSegmentIndex < segments.length - 1) {
+      // Advance to next segment
+      onSegmentChange(currentSegmentIndex + 1);
+    } else {
+      // Last segment, stop playing
+      setIsPlaying(false);
       if (playerRef.current) {
-        playerRef.current.destroy();
+        playerRef.current.pause();
       }
-    };
-  }, []);
+    }
+  };
 
   const handlePlayPause = () => {
     if (!playerRef.current) return;
 
     if (isPlaying) {
-      playerRef.current.pauseVideo();
+      playerRef.current.pause();
     } else {
-      playerRef.current.playVideo();
+      playerRef.current.play().catch((e: any) => {
+        console.log("Play prevented:", e);
+      });
     }
   };
 
@@ -204,11 +189,14 @@ export default function PreviewPlayer({
     if (segments.length === 0) return;
 
     onSegmentChange(0);
+    setIsPlaying(true);
     setTimeout(() => {
       if (playerRef.current) {
-        playerRef.current.playVideo();
+        playerRef.current.play().catch((e: any) => {
+          console.log("Play all prevented:", e);
+        });
       }
-    }, 500);
+    }, 1000);
   };
 
   const formatTime = (seconds: number) => {
@@ -216,6 +204,17 @@ export default function PreviewPlayer({
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      stopTimeTracking();
+      if (playerRef.current && !playerRef.current.isDisposed()) {
+        playerRef.current.dispose();
+        playerRef.current = null;
+      }
+    };
+  }, []);
 
   if (segments.length === 0) {
     return (
@@ -248,9 +247,13 @@ export default function PreviewPlayer({
 
   return (
     <div>
-      {/* Player Container */}
-      <div ref={containerRef} className="bg-black rounded-lg overflow-hidden mb-4" style={{ height: "400px" }}>
-        <div id="youtube-player" style={{ width: "100%", height: "100%" }}></div>
+      {/* Video.js Player */}
+      <div className="bg-black rounded-lg overflow-hidden mb-4">
+        <video
+          ref={videoRef}
+          className="video-js vjs-big-play-centered"
+          style={{ width: "100%", height: "400px" }}
+        />
       </div>
 
       {/* Controls */}
@@ -264,6 +267,11 @@ export default function PreviewPlayer({
             <div className="text-xs text-gray-500 mt-1">
               {currentSegment?.startTime} - {currentSegment?.endTime}
             </div>
+            {currentTime > 0 && (
+              <div className="text-xs text-blue-600 mt-1">
+                Current: {formatTime(currentTime)}
+              </div>
+            )}
           </div>
           <button
             onClick={handlePlayPause}
