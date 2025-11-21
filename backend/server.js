@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const generateRouter = require('./routes/generate');
+const youtubeRouter = require('./routes/youtube');
 
 const app = express();
 const PORT = process.env.PORT || 3032;
@@ -12,6 +13,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api', generateRouter);
+app.use('/api/youtube', youtubeRouter);
 
 // Health check
 app.get('/health', (req, res) => {

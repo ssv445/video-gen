@@ -61,13 +61,13 @@ export function isValidTimeFormat(timeStr: string): boolean {
 }
 
 /**
- * Fetches YouTube video title using oEmbed API.
+ * Fetches YouTube video title via backend API to avoid CORS issues.
  * No API key required!
  */
 export async function fetchYouTubeTitle(videoId: string): Promise<string> {
   try {
     const response = await fetch(
-      `https://www.youtube.com/oembed?url=https://youtube.com/watch?v=${videoId}&format=json`
+      `http://localhost:3032/api/youtube/title/${videoId}`
     );
 
     if (!response.ok) {
