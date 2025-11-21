@@ -136,17 +136,17 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-[1600px] mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-3 sm:py-4">
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">
             Parody Song Generator
           </h1>
         </div>
       </header>
 
       {/* Main Content - Centered Preview */}
-      <main className="flex-1 flex flex-col max-w-[1600px] mx-auto w-full px-4 py-6">
+      <main className="flex-1 flex flex-col max-w-[1600px] mx-auto w-full px-3 sm:px-4 py-4 sm:py-6">
         {/* Project Selector */}
-        <div className="flex-shrink-0 mb-6">
+        <div className="flex-shrink-0 mb-4 sm:mb-6">
           <ProjectSelector
             projects={projects}
             currentProjectId={currentProjectId}
@@ -159,7 +159,7 @@ export default function Home() {
         </div>
 
         {/* Preview Player - Center */}
-        <div className="flex-shrink-0 mb-6">
+        <div className="flex-shrink-0 mb-4 sm:mb-6">
           <PreviewPlayer
             segments={segments}
             currentSegmentIndex={currentSegmentIndex}

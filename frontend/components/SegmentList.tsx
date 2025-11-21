@@ -148,14 +148,14 @@ export default function SegmentList({
     return (
       <div className="flex flex-col h-full">
         {/* Horizontal Segment Row */}
-        <div className="flex-shrink-0 mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-gray-900">Segments</h2>
-              <span className="text-sm text-gray-500">
+        <div className="flex-shrink-0 mb-3 sm:mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900">Segments</h2>
+              <span className="text-xs sm:text-sm text-gray-500">
                 {segments.length}/10 · {formatDuration(totalDuration)}
                 {totalDuration > 1200 && (
-                  <span className="text-red-600 ml-2">(exceeds 20 min)</span>
+                  <span className="text-red-600 ml-1 sm:ml-2">(exceeds 20 min)</span>
                 )}
               </span>
             </div>
@@ -164,28 +164,30 @@ export default function SegmentList({
               <button
                 onClick={() => onSegmentClick(Math.max(0, currentSegmentIndex - 1))}
                 disabled={currentSegmentIndex === 0}
-                className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-2 sm:px-3 py-1 text-xs sm:text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                ← Previous
+                <span className="hidden sm:inline">← Previous</span>
+                <span className="sm:hidden">←</span>
               </button>
               <button
                 onClick={() => onSegmentClick(Math.min(segments.length - 1, currentSegmentIndex + 1))}
                 disabled={currentSegmentIndex === segments.length - 1}
-                className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-2 sm:px-3 py-1 text-xs sm:text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Next →
+                <span className="hidden sm:inline">Next →</span>
+                <span className="sm:hidden">→</span>
               </button>
             </div>
           </div>
 
           {segments.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 bg-white rounded-lg border-2 border-dashed border-gray-300">
-              <p className="text-sm">No segments yet. Add a YouTube video below!</p>
+            <div className="text-center py-6 sm:py-8 text-gray-500 bg-white rounded-lg border-2 border-dashed border-gray-300">
+              <p className="text-xs sm:text-sm px-4">No segments yet. Add a YouTube video below!</p>
             </div>
           ) : (
             <div
               ref={scrollContainerRef}
-              className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin"
+              className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 scrollbar-thin"
             >
               {segments.map((segment, index) => (
                 <div
@@ -212,29 +214,29 @@ export default function SegmentList({
         </div>
 
         {/* Add Video Input - Below Segments */}
-        <div className="flex-shrink-0 bg-white rounded-lg border border-gray-300 p-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="flex-shrink-0 bg-white rounded-lg border border-gray-300 p-3 sm:p-4">
+          <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
             Add YouTube Video
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="https://www.youtube.com/watch?v=..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 sm:px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
               onClick={handleAddVideo}
               disabled={isLoadingTitle}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 sm:px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
               {isLoadingTitle ? "Loading..." : "Add"}
             </button>
           </div>
           {urlError && (
-            <p className="mt-2 text-sm text-red-600">{urlError}</p>
+            <p className="mt-2 text-xs sm:text-sm text-red-600">{urlError}</p>
           )}
         </div>
       </div>

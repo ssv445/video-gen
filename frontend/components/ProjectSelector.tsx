@@ -77,7 +77,7 @@ export default function ProjectSelector({
   };
 
   return (
-    <div className="flex items-center gap-3" ref={dropdownRef}>
+    <div className="flex items-center gap-2 sm:gap-3" ref={dropdownRef}>
       {/* Project Name / Edit Input */}
       {isEditing ? (
         <div className="flex items-center gap-2">
@@ -88,20 +88,20 @@ export default function ProjectSelector({
             onChange={(e) => setEditingName(e.target.value)}
             onKeyDown={handleKeyDown}
             onBlur={handleSaveEdit}
-            className="px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-2 sm:px-3 py-1.5 sm:py-2 text-sm border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
       ) : (
         <div className="relative">
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
-            <span className="font-medium">
+            <span className="font-medium text-sm sm:text-base truncate max-w-[150px] sm:max-w-none">
               {currentProject?.name || "Select Project"}
             </span>
             <svg
-              className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -177,18 +177,19 @@ export default function ProjectSelector({
         <>
           <button
             onClick={handleStartEdit}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors"
             title="Rename Project"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           </button>
           <button
             onClick={onProjectCreate}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm sm:text-base whitespace-nowrap"
           >
-            New Project
+            <span className="hidden sm:inline">New Project</span>
+            <span className="sm:hidden">New</span>
           </button>
         </>
       )}
