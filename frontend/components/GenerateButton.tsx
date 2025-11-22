@@ -30,8 +30,9 @@ export default function GenerateButton({
     setProgress("Preparing to generate audio...");
 
     try {
-      // Call backend API
-      const response = await fetch("http://localhost:3032/api/generate", {
+      // Call backend API (falls back to localhost:3032 in development, disabled in preview)
+      const apiUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3032";
+      const response = await fetch(`${apiUrl}/api/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -61,13 +61,13 @@ export function isValidTimeFormat(timeStr: string): boolean {
 }
 
 /**
- * Fetches YouTube video title via backend API to avoid CORS issues.
+ * Fetches YouTube video title via Next.js API route to avoid CORS issues.
  * No API key required!
  */
 export async function fetchYouTubeTitle(videoId: string): Promise<string> {
   try {
     const response = await fetch(
-      `http://localhost:3032/api/youtube/title/${videoId}`
+      `/api/youtube/title/${videoId}`
     );
 
     if (!response.ok) {
